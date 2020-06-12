@@ -5,6 +5,23 @@ from world import World
 import random
 from ast import literal_eval
 
+
+class Queue:
+    def __init__(self):
+        self.queue = []
+
+    def enqueue(self, value):
+        self.queue.append(value)
+
+    def dequeue(self):
+        if self.size() > 0:
+            return self.queue.pop(0)
+        else:
+            return None
+
+    def size(self):
+        return len(self.queue)
+
 # Load world
 world = World()
 
@@ -15,7 +32,6 @@ world = World()
 # map_file = "maps/test_loop.txt"
 # map_file = "maps/test_loop_fork.txt"
 map_file = "maps/main_maze.txt"
-import maze
 
 # Loads the map into a dictionary
 room_graph=literal_eval(open(map_file, "r").read())
@@ -24,30 +40,118 @@ world.load_graph(room_graph)
 # Print an ASCII map
 world.print_rooms()
 
+# start in room 0
 player = Player(world.starting_room)
 
-parts_without_txt = map_file.split(".")
-parts_without_slash = parts_without_txt[0].split("/")
-map_name = parts_without_slash[1]
+visited = {}
+visited[player.current_room.id] = True
 
-print("\nTraversing", map_name, "...\n")
-traversal_path, traversal_directions = maze.traverse_maze(player)
+# Fill this out with directions to walk
+# traversal_path = ['n', 'n']
+traversal_path = []
+rooms_to_visit = []
 
-with open("traversals/" + map_name + "_traversal.txt", "w") as traversal_record:
-    for i in range(len(traversal_path)):
 
-        room = str(traversal_path[i])
+def traverse():
+    found_exit = True
 
-        if i < len(traversal_directions):
-            direction_to_leave_room = traversal_directions[i]
-        else:
-            direction_to_leave_room = "None"
+    while found_exit:
+        found_exit = False
+        exits = player.current_room.get_exits()
+        current = player.current_room
+        possible_rooms = []
 
-        traversal_record.write(room + " " + direction_to_leave_room + "\n")
+        for direction in exits:
+            if current.get_room_in_direction(direction).id not in visited:
+                possible_rooms.append((current.get_room_in_direction(direction), direction))
 
-traversal_path = traversal_directions
+        if len(possible_rooms) > 0:
 
-# TRAVERSAL TEST - DO NOT MODIFY
+            room_to_traverse = possible_rooms[0]
+            for i in range(len(possible_rooms)):
+
+                if len(possible_rooms[i][0].get_exits()) < 2:
+                    room_to_traverse = possible_rooms[i]
+                    break
+
+                if possible_rooms[i][1] is 'w':
+                    room_to_traverse = possible_rooms[i]
+                    break
+                elif possible_rooms[i][1] is 's':
+                    room_to_traverse = possible_rooms[i]
+
+            for room in possible_rooms:
+                if room != room_to_traverse:
+                    rooms_to_visit.append(room[0].id)
+            room, direction = room_to_traverse
+
+            player.travel(direction)
+            traversal_path.append(direction)
+            visited[room.id] = True
+            found_exit = True
+
+
+def find_shortest_path_to_unexplored(destination):
+    visited_room = set()
+
+    q = Queue()
+    q2 = Queue()
+
+    q.enqueue([])
+    q2.enqueue(player.current_room)
+
+    while q.size() > 0:
+        path = q.dequeue()
+        current = q2.dequeue()
+        if current.id not in visited_room:
+            visited_room.add(current.id)
+
+            if current.id == destination:
+                return path
+            exits = current.get_exits()
+            for direction in exits:
+                path_copy = list(path)
+                path_copy.append(direction)
+                q.enqueue(path_copy)
+                q2.enqueue(current.get_room_in_direction(direction))
+    return None
+
+
+def find_unexplored(path):
+
+    for direction in path:
+        player.travel(direction)
+        traversal_path.append(direction)
+    visited[player.current_room.id] = True
+
+
+while len(world.rooms) > len(visited):
+    traverse()
+
+    if len(visited) != len(world.rooms):
+
+        paths = []
+
+        for unvisited in rooms_to_visit:
+            paths.append(find_shortest_path_to_unexplored(unvisited))
+
+        shortest_path = None
+        first_iter = True
+
+        for path in paths:
+            if first_iter:
+                shortest_path = path
+                first_iter = False
+                continue
+            if len(path) <= len(shortest_path):
+                shortest_path = path
+
+        find_unexplored(shortest_path)
+
+        rooms_to_visit.remove(player.current_room.id)
+
+
+# TRAVERSAL TEST
 visited_rooms = set()
 player.current_room = world.starting_room
 visited_rooms.add(player.current_room)
